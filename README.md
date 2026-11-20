@@ -4,6 +4,8 @@ A personal market news dashboard built with React and Vite. Choose a currency pa
 
 The dashboard has a login-only screen with the static username `mc` and password `mc1234`; there is no registration. Login persists for the current browser tab. This is a client-side personal-use gate, not secure authentication: the credentials are included in the frontend bundle.
 
+The dashboard includes a **Market conditions** page that highlights scheduled Forex Factory events for the selected instrument. It is an event-risk view only; it does not use live prices, measure volatility or liquidity, or determine whether a particular trade is safe. The **Market sessions** page shows conventional Sydney, Tokyo, London, and New York FX session hours in each city's local time and updates for daylight-saving changes. Session definitions and broker hours can differ, so use your broker's schedule for instrument-specific availability.
+
 ## Run locally
 
 ```sh

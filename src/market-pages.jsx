@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarClock, Clock3, LoaderCircle, Moon, ShieldAlert, Sun, Globe2 } from 'lucide-react';
+import { CalendarClock, Clock3, LoaderCircle, Moon, ShieldAlert, Sun, Globe2, Search, ChevronDown, X } from 'lucide-react';
 
 const sessions = [
   { name: 'Sydney', zone: 'Australia/Sydney', open: 8, close: 16 },
@@ -32,6 +32,8 @@ export function MarketConditionsPage({ pairs, pair, setPair }) {
   const [error, setError] = useState('');
   const [now, setNow] = useState(new Date());
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [marketQuery, setMarketQuery] = useState('');
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(timer);
@@ -57,6 +59,7 @@ export function MarketConditionsPage({ pairs, pair, setPair }) {
   const upcoming = useMemo(() => events.map(event => ({ ...event, timestamp: Date.parse(event.publishedAt) }))
     .filter(event => Number.isFinite(event.timestamp) && event.timestamp >= now.getTime() && event.timestamp <= now.getTime() + 24 * 60 * 60 * 1000)
     .sort((a, b) => a.timestamp - b.timestamp), [events, now]);
+  const filteredPairs = useMemo(() => pairs.filter(item => `${item.code} ${item.name} ${item.group}`.toLowerCase().includes(marketQuery.toLowerCase())), [pairs, marketQuery]);
   const eventWindow = useMemo(() => events.map(event => ({ ...event, timestamp: Date.parse(event.publishedAt) }))
     .filter(event => Number.isFinite(event.timestamp) && event.timestamp >= now.getTime() - 30 * 60 * 1000 && event.timestamp <= now.getTime() + 3 * 60 * 60 * 1000), [events, now]);
   const highSoon = eventWindow.find(event => event.impact === 'high' && event.timestamp < now.getTime() + 30 * 60 * 1000);
@@ -73,11 +76,11 @@ export function MarketConditionsPage({ pairs, pair, setPair }) {
     <h1>Market conditions<span>.</span></h1>
     <p className="intro">Scheduled event risk for {pair.name}. Select a market to update the outlook.</p>
     <section className="panel market-choice"><div className="section-title"><div><small>SELECT MARKET</small><h2>{pair.flags} {pair.code}</h2></div><span className="pair-count">{pairs.length} MARKETS</span></div>
-      <label className="market-native-select"><span>MARKET</span><select value={pair.code} onChange={e => setPair(pairs.find(item => item.code === e.target.value) || pairs[0])}>{pairs.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select></label>
+      <div className="market-search-picker"><span className="market-select-label">MARKET</span><button className="market-select-trigger" aria-expanded={selectorOpen} onClick={() => setSelectorOpen(value => !value)}><span><b>{pair.code}</b><small>{pair.name}</small></span>{selectorOpen ? <X size={17}/> : <ChevronDown size={17}/>}</button>{selectorOpen&&<div className="market-search-menu"><div className="market-search-input"><Search size={16}/><input autoFocus value={marketQuery} onChange={event => setMarketQuery(event.target.value)} placeholder="Search symbol or market"/><button onClick={() => setMarketQuery('')} aria-label="Clear search"><X size={14}/></button></div><div className="market-search-results">{filteredPairs.map(item=><button key={item.code} className="market-search-option" onClick={()=>{setPair(item);setSelectorOpen(false);setMarketQuery('')}}><span className="market-option-flag">{item.flags}</span><span><b>{item.code}</b><small>{item.group} · {item.name}</small></span>{item.code===pair.code&&<span className="selected-check">Selected</span>}</button>)}{!filteredPairs.length&&<p className="market-no-results">No markets match that search.</p>}</div></div>}</div>
     </section>
     {loading ? <div className="state"><LoaderCircle className="spin" size={22}/><b>Loading scheduled events…</b><span>Checking Forex Factory's weekly calendar for {pair.code}.</span></div>
       : error ? <div className="state error"><b>Event risk unavailable</b><span>{error}</span><button onClick={() => setRefreshKey(key => key + 1)}>Try again</button></div> : <>
-        <section className={`conditions-card condition-${outlook.level}`}><div className="conditions-icon"><ShieldAlert size={24}/></div><div><small>SCHEDULED EVENT OUTLOOK · NEXT 3 HOURS</small><h2>{outlook.title}</h2><p>{outlook.action}</p>{outlook.event && <div className="condition-event"><b>{outlook.event.eventCurrency} · {outlook.event.title}</b><span>{new Date(outlook.event.timestamp).toLocaleString()} · {outlook.event.impact} expected</span></div>}</div></section>
+        <section className={`conditions-card condition-${outlook.level}`} aria-live="polite"><div className="conditions-icon"><ShieldAlert size={24}/></div><div className="condition-content"><div className="condition-heading"><small>SCHEDULED EVENT OUTLOOK · NEXT 3 HOURS</small><span className="condition-level-chip"><i/> {outlook.level==='lower'?'LOWER RISK':outlook.level==='elevated'?'ELEVATED RISK':'HIGH RISK'}</span></div><h2>{outlook.title}</h2><p>{outlook.action}</p>{outlook.event && <div className="condition-event"><b>{outlook.event.eventCurrency} · {outlook.event.title}</b><span><strong>{outlook.event.impact} expected</strong> · {new Date(outlook.event.timestamp).toLocaleString()}</span></div>}</div></section>
         <p className="risk-explainer conditions-note">This is an event-risk indicator based on Forex Factory's expected impact ratings. It does not measure live price volatility or liquidity and cannot determine whether a trade is safe. Always check your broker and your own trading plan.</p>
         <section className="session-panel"><div className="section-title"><div><small>NEXT 24 HOURS</small><h2>Scheduled releases</h2></div><button className="refresh-events" onClick={() => setRefreshKey(key => key + 1)}><CalendarClock size={14}/> Refresh</button></div>
           {upcoming.length ? <div className="upcoming-list">{upcoming.map(event => <article className="upcoming-event" key={event.id}><span className={`impact-badge impact-${event.impact}`}>{event.impact} expected</span><div><b>{event.eventCurrency} · {event.title}</b><small>{new Date(event.timestamp).toLocaleString()}{event.description ? ` · ${event.description}` : ''}</small></div></article>)}</div> : <p className="quiet-note">No upcoming events are listed for this market in the next 24 hours.</p>}

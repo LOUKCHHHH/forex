@@ -6,6 +6,8 @@ The dashboard has a login-only screen with initial username `mc` and password `m
 
 The dashboard includes a **Market conditions** page that highlights scheduled Forex Factory events for the selected instrument. It is an event-risk view only; it does not use live prices, measure volatility or liquidity, or determine whether a particular trade is safe. The **Market sessions** page shows conventional Sydney, Tokyo, London, and New York FX session hours in each city's local time and updates for daylight-saving changes. Session definitions and broker hours can differ, so use your broker's schedule for instrument-specific availability.
 
+Pin markets in the Watchlist for quick selection; watchlist choices are saved in the current browser. Market conditions includes a countdown to the next high-impact calendar event. Optional browser notifications fire 15 minutes before a high-impact event while the Market conditions page is open and notification permission is granted.
+
 ## Run locally
 
 ```sh

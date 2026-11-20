@@ -171,3 +171,28 @@ body,.app{background:#f3f6f4;color:#1c2b25}.sidebar{background:#183129;border-co
   .app .intro{font-size:11px;line-height:1.55}
 }
 @media(max-width:370px){.topbar-actions .theme-toggle,.topbar-actions .logout-button{padding:6px}.topbar-actions .theme-toggle{font-size:0}.topbar-actions .logout-button span{display:none}.topbar-crumb{font-size:8px}}
+
+/* Refined collapsed rail and borderless phone profile row */
+.app .sidebar.collapsed{width:72px;padding:18px 0;align-items:center}
+.app .sidebar.collapsed .sidebar-brand-row{align-items:center;gap:12px}
+.app .sidebar.collapsed .sidebar-brand-row .brand{width:40px;height:40px;min-width:40px;display:grid;place-items:center;padding:0}
+.app .sidebar.collapsed .brand-icon{width:32px;height:32px;margin:0}
+.app .sidebar.collapsed .desktop-sidebar-toggle{width:34px;height:34px;margin:0}
+.app .sidebar.collapsed .side-label{display:none}
+.app .sidebar.collapsed .nav-active{width:44px;height:44px;min-height:44px;display:grid;place-items:center;gap:0;margin:2px 0;padding:0;border-radius:8px;line-height:0}
+.app .sidebar.collapsed .nav-active>svg{width:18px;height:18px;margin:0}
+.app .sidebar.collapsed .nav-active span,.app .sidebar.collapsed .user-chip div{display:none}
+.app .sidebar.collapsed .side-bottom{width:100%;display:flex;justify-content:center;margin-top:auto}
+.app .sidebar.collapsed .user-chip.profile-link{width:44px;height:48px;justify-content:center;padding:7px 0 0;border:0;border-top:1px solid #dce5df;border-radius:0}
+.app.theme-dark .sidebar.collapsed .user-chip.profile-link{border-top-color:#314137}
+@media(max-width:560px){
+  .app .sidebar.collapsed{width:100%;padding:10px 12px}
+  .app .sidebar.collapsed .sidebar-brand-row{align-items:center}
+  .app .sidebar.collapsed .sidebar-brand-row .brand{width:auto;height:auto;min-width:0;display:flex;place-items:initial;padding:0}
+  .app .sidebar.collapsed .brand-icon{width:29px;height:29px}
+  .app .sidebar.collapsed .desktop-sidebar-toggle{display:none}
+  .app .sidebar.collapsed .nav-active{display:none;width:100%;height:auto;min-height:43px;justify-content:flex-start;place-items:initial;gap:9px;margin:3px 0 0;padding:11px 10px;line-height:normal}
+  .app .sidebar.collapsed.mobile-open .nav-active{display:flex}
+  .app .sidebar.collapsed .nav-active span{display:inline}
+  .app .sidebar .user-chip.profile-link,.app .sidebar.collapsed .user-chip.profile-link{width:100%;height:auto;min-height:38px;justify-content:flex-start;padding:8px 4px 2px;border:0;border-radius:0;background:transparent}
+}

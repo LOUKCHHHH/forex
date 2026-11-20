@@ -2,7 +2,7 @@
 
 A personal market news dashboard built with React and Vite. Choose a currency pair, commodity, index, or cryptocurrency, filter headlines by date, optionally limit results to the official Federal Reserve domain, and fetch current English-language news in separate article cards. Searches need no extra keyword.
 
-The dashboard has a shared login-only screen with initial username `mc` and password `mc1234`; there is no registration. The Profile page lets you change the shared username and password for everyone. Login sessions use an HttpOnly cookie, and passwords are saved as one-way hashes in Upstash Redis. This is intended for a shared personal dashboard, not high-security account access.
+The dashboard has a login-only screen with initial username `mc` and password `mc1234`; there is no registration. The Profile page lets you change them for the current browser. Login persists for the current browser tab. Credentials are stored in browser local storage, so this is a client-side personal-use gate, not secure authentication.
 
 The dashboard includes a **Market conditions** page that highlights scheduled Forex Factory events for the selected instrument. It is an event-risk view only; it does not use live prices, measure volatility or liquidity, or determine whether a particular trade is safe. The **Market sessions** page shows conventional Sydney, Tokyo, London, and New York FX session hours in each city's local time and updates for daylight-saving changes. Session definitions and broker hours can differ, so use your broker's schedule for instrument-specific availability.
 
@@ -14,10 +14,6 @@ npm run dev
 ```
 
 Open the URL printed by Vite. Do not open `index.html` directly or use a static-only preview server: those do not run the `/api/news` backend route.
-
-## Shared login storage
-
-The login requires an Upstash Redis database so username/password changes are shared between browsers. In Vercel, open the project **Storage** or **Marketplace**, create/connect an Upstash Redis database, and ensure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are available to the project. Redeploy after connecting it. For local Vite development, copy those two values from the Upstash database into `.env.local` along with `GNEWS_API_KEY`. The first use initializes the shared login to `mc` / `mc1234`; change it in the Profile page. Existing sessions in other browsers are signed out after a password change and must sign in with the new credentials.
 
 ## Live news setup
 

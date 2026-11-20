@@ -24,6 +24,8 @@ const FED_FEEDS = [
   'https://www.federalreserve.gov/feeds/speeches.xml',
   'https://www.federalreserve.gov/feeds/testimony.xml',
 ];
+const CNBC_FED_QUERY = '"Federal Reserve" OR FOMC OR "Federal Open Market Committee" OR "Fed rate" OR "Fed chair"';
+const CNBC_FED_RELEVANCE = /\b(federal reserve|fomc|federal open market committee|fed (?:chair|officials?|rate|rates|policy|meeting|decision|minutes))\b/i;
 
 function decodeXml(value = '') {
   return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]*>/g, ' ')
@@ -51,7 +53,9 @@ async function getFederalReserveArticles(fromMs, toMs) {
     const url = rssTag(item, 'link');
     const description = rssTag(item, 'description');
     const publishedAt = rssTag(item, 'pubDate');
-    return { title, url, description, publishedAt, source: { name: 'Federal Reserve', url: 'https://www.federalreserve.gov' } };
+    const imageMatch = item.match(/<(?:media:content|enclosure)\b[^>]*url=["']([^"']+)["']/i);
+    const image = imageMatch ? decodeXml(imageMatch[1]) : '';
+    return { title, url, description, image, publishedAt, source: { name: 'Federal Reserve', url: 'https://www.federalreserve.gov' } };
   })).filter(article => {
     if (!article.title || !article.url) return false;
     const published = Date.parse(article.publishedAt);
@@ -63,6 +67,29 @@ async function getFederalReserveArticles(fromMs, toMs) {
   return articles.slice(0, 30);
 }
 
+async function getCnbcFedArticles(apiKey, from, to, fromMs, toMs) {
+  const params = new URLSearchParams({ q: CNBC_FED_QUERY, lang: 'en', max: '10', sortby: 'publishedAt' });
+  const freshnessFloor = Date.now() - 12 * 60 * 60 * 1000;
+  const providerCanSearchRange = fromMs === null || fromMs <= freshnessFloor;
+  if (from && providerCanSearchRange) params.set('from', from);
+  if (to && providerCanSearchRange) params.set('to', to);
+  const response = await fetch(`https://gnews.io/api/v4/search?${params}`, { headers: { 'X-Api-Key': apiKey } });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.errors?.[0] || `GNews request failed (${response.status})`);
+  return (payload.articles || []).filter(article => {
+    if (!article.title || !article.url) return false;
+    let url;
+    try { url = new URL(article.url); } catch { return false; }
+    if (url.hostname !== 'cnbc.com' && !url.hostname.endsWith('.cnbc.com')) return false;
+    if (!CNBC_FED_RELEVANCE.test(`${article.title} ${article.description || ''} ${article.content || ''}`)) return false;
+    const published = Date.parse(article.publishedAt || '');
+    if ((fromMs !== null || toMs !== null) && !Number.isFinite(published)) return false;
+    if (Number.isFinite(fromMs) && published < fromMs) return false;
+    if (Number.isFinite(toMs) && published > toMs) return false;
+    return true;
+  }).map(article => ({ title: article.title, description: article.description, content: article.content, url: article.url, image: article.image, publishedAt: article.publishedAt, source: article.source }));
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Use GET to search news.' });
@@ -70,7 +97,7 @@ export default async function handler(req, res) {
   const pairQuery = PAIRS[pair]?.[0];
   if (!pairQuery) return res.status(400).json({ error: 'Choose a supported market.' });
   const source = String(req.query.source || 'all');
-  if (!['all', 'fed'].includes(source)) return res.status(400).json({ error: 'Choose a supported news source.' });
+  if (!['all', 'fed', 'fed-cnbc'].includes(source)) return res.status(400).json({ error: 'Choose a supported news source.' });
   const from = req.query.from ? String(req.query.from) : '';
   const to = req.query.to ? String(req.query.to) : '';
   const fromMs = from ? Date.parse(from) : null;
@@ -80,17 +107,27 @@ export default async function handler(req, res) {
       (fromMs !== null && toMs !== null && fromMs > toMs)) {
     return res.status(400).json({ error: 'The selected date range is invalid.' });
   }
-  if (source === 'fed') {
+  if (source === 'fed' || source === 'fed-cnbc') {
     try {
-      const articles = await getFederalReserveArticles(fromMs, toMs);
-      return res.status(200).json({ pair, source, from, to, articles });
+      const fedArticles = await getFederalReserveArticles(fromMs, toMs);
+      if (source === 'fed') return res.status(200).json({ pair, source, from, to, articles: fedArticles });
+      const apiKey = process.env.GNEWS_API_KEY;
+      if (!apiKey) return res.status(200).json({ pair, source, from, to, articles: fedArticles, warning: 'CNBC coverage needs GNEWS_API_KEY. Showing official Federal Reserve items only.' });
+      try {
+        const cnbcArticles = await getCnbcFedArticles(apiKey, from, to, fromMs, toMs);
+        const byUrl = new Map([...fedArticles, ...cnbcArticles].map(article => [article.url, article]));
+        const articles = [...byUrl.values()].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+        return res.status(200).json({ pair, source, from, to, articles });
+      } catch {
+        return res.status(200).json({ pair, source, from, to, articles: fedArticles, warning: 'CNBC could not be reached right now. Showing official Federal Reserve items only.' });
+      }
     } catch {
       return res.status(502).json({ error: 'Could not load Federal Reserve RSS feeds. Open the official News & Events calendar and try again later.' });
     }
   }
   const apiKey = process.env.GNEWS_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'Live news is not configured. Locally, add GNEWS_API_KEY to .env.local and restart Vite. On Vercel, add it in Project Settings → Environment Variables, then redeploy.' });
-  const params = new URLSearchParams({ q: pairQuery, lang: 'en', max: '10', sortby: 'publishedAt', apikey: apiKey });
+  const params = new URLSearchParams({ q: pairQuery, lang: 'en', max: '10', sortby: 'publishedAt' });
   // GNews Free cannot return articles from the most recent 12 hours. Avoid
   // sending an inverted interval for short ranges; filter the fetched articles below.
   const freeFreshnessFloor = Date.now() - 12 * 60 * 60 * 1000;
@@ -105,7 +142,6 @@ export default async function handler(req, res) {
       if (!a.title || !a.url) return false;
       let url;
       try { url = new URL(a.url); } catch { return false; }
-      if (source === 'fed' && url.hostname !== 'federalreserve.gov' && !url.hostname.endsWith('.federalreserve.gov')) return false;
       const published = Date.parse(a.publishedAt || '');
       if ((fromMs !== null || toMs !== null) && !Number.isFinite(published)) return false;
       if (Number.isFinite(fromMs) && published < fromMs) return false;

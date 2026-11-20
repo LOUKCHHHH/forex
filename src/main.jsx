@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Search, ChevronDown, ChevronLeft, ChevronRight, ArrowUpRight, Activity, LayoutDashboard, Newspaper, Clock3, LoaderCircle, X, Menu, LogOut, LockKeyhole, Moon, Sun } from 'lucide-react';
 import './styles.css';

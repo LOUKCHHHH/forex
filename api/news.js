@@ -19,20 +19,99 @@ const PAIRS = {
   'BTC/USD': ['"BTC/USD" OR BTCUSD OR Bitcoin OR "Bitcoin price"'], 'ETH/USD': ['"ETH/USD" OR ETHUSD OR Ethereum OR "Ethereum price"']
 };
 
+const FED_FEEDS = [
+  'https://www.federalreserve.gov/feeds/press_monet.xml',
+  'https://www.federalreserve.gov/feeds/speeches.xml',
+  'https://www.federalreserve.gov/feeds/testimony.xml',
+];
+
+function decodeXml(value = '') {
+  return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]*>/g, ' ')
+    .replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(parseInt(n, 10)))
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&apos;|&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+}
+
+function rssTag(item, tag) {
+  const match = item.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+  return match ? decodeXml(match[1]) : '';
+}
+
+async function getFederalReserveArticles(fromMs, toMs) {
+  const results = await Promise.allSettled(FED_FEEDS.map(async url => {
+    const response = await fetch(url, { headers: { Accept: 'application/rss+xml, application/xml, text/xml' } });
+    if (!response.ok) throw new Error(`Federal Reserve feed request failed (${response.status})`);
+    return response.text();
+  }));
+  const feeds = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+  if (!feeds.length) throw new Error('No Federal Reserve feeds responded.');
+  const articles = feeds.flatMap(xml => [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map(([, item]) => {
+    const title = rssTag(item, 'title');
+    const url = rssTag(item, 'link');
+    const description = rssTag(item, 'description');
+    const publishedAt = rssTag(item, 'pubDate');
+    return { title, url, description, publishedAt, source: { name: 'Federal Reserve', url: 'https://www.federalreserve.gov' } };
+  })).filter(article => {
+    if (!article.title || !article.url) return false;
+    const published = Date.parse(article.publishedAt);
+    if ((fromMs !== null || toMs !== null) && !Number.isFinite(published)) return false;
+    if (Number.isFinite(fromMs) && published < fromMs) return false;
+    if (Number.isFinite(toMs) && published > toMs) return false;
+    return true;
+  }).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+  return articles.slice(0, 30);
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Use GET to search news.' });
   const pair = String(req.query.pair || '').toUpperCase();
   const pairQuery = PAIRS[pair]?.[0];
   if (!pairQuery) return res.status(400).json({ error: 'Choose a supported market.' });
+  const source = String(req.query.source || 'all');
+  if (!['all', 'fed'].includes(source)) return res.status(400).json({ error: 'Choose a supported news source.' });
+  const from = req.query.from ? String(req.query.from) : '';
+  const to = req.query.to ? String(req.query.to) : '';
+  const fromMs = from ? Date.parse(from) : null;
+  const toMs = to ? Date.parse(to) : null;
+  if ((from && (!Number.isFinite(fromMs) || new Date(fromMs).toISOString() !== from)) ||
+      (to && (!Number.isFinite(toMs) || new Date(toMs).toISOString() !== to)) ||
+      (fromMs !== null && toMs !== null && fromMs > toMs)) {
+    return res.status(400).json({ error: 'The selected date range is invalid.' });
+  }
+  if (source === 'fed') {
+    try {
+      const articles = await getFederalReserveArticles(fromMs, toMs);
+      return res.status(200).json({ pair, source, from, to, articles });
+    } catch {
+      return res.status(502).json({ error: 'Could not load Federal Reserve RSS feeds. Open the official News & Events calendar and try again later.' });
+    }
+  }
   const apiKey = process.env.GNEWS_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'Live news is not configured. Locally, add GNEWS_API_KEY to .env.local and restart Vite. On Vercel, add it in Project Settings → Environment Variables, then redeploy.' });
   const params = new URLSearchParams({ q: pairQuery, lang: 'en', max: '10', sortby: 'publishedAt', apikey: apiKey });
+  // GNews Free cannot return articles from the most recent 12 hours. Avoid
+  // sending an inverted interval for short ranges; filter the fetched articles below.
+  const freeFreshnessFloor = Date.now() - 12 * 60 * 60 * 1000;
+  const providerCanSearchRange = fromMs === null || fromMs <= freeFreshnessFloor;
+  if (from && providerCanSearchRange) params.set('from', from);
+  if (to && providerCanSearchRange) params.set('to', to);
   try {
-    const upstream = await fetch(`https://gnews.io/api/v4/search?${params}`);
+    const upstream = await fetch(`https://gnews.io/api/v4/search?${params}`, { headers: { 'X-Api-Key': apiKey } });
     const payload = await upstream.json();
     if (!upstream.ok) return res.status(upstream.status === 429 ? 429 : 502).json({ error: payload.errors?.[0] || 'The news provider could not complete this search.' });
-    const articles = (payload.articles || []).filter(a => a.title && a.url).map(a => ({ title: a.title, description: a.description, content: a.content, url: a.url, image: a.image, publishedAt: a.publishedAt, source: a.source }));
-    return res.status(200).json({ pair, articles });
+    const articles = (payload.articles || []).filter(a => {
+      if (!a.title || !a.url) return false;
+      let url;
+      try { url = new URL(a.url); } catch { return false; }
+      if (source === 'fed' && url.hostname !== 'federalreserve.gov' && !url.hostname.endsWith('.federalreserve.gov')) return false;
+      const published = Date.parse(a.publishedAt || '');
+      if ((fromMs !== null || toMs !== null) && !Number.isFinite(published)) return false;
+      if (Number.isFinite(fromMs) && published < fromMs) return false;
+      if (Number.isFinite(toMs) && published > toMs) return false;
+      return true;
+    }).map(a => ({ title: a.title, description: a.description, content: a.content, url: a.url, image: a.image, publishedAt: a.publishedAt, source: a.source }));
+    return res.status(200).json({ pair, source, from, to, articles });
   } catch { return res.status(502).json({ error: 'Could not connect to the news provider. Try again shortly.' }); }
 }

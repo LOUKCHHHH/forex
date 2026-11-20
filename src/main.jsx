@@ -15,6 +15,8 @@ const pairs = [
 ].map(([code,flags,name,group])=>({code,flags,name,group})));
 const impactNames = {'very-high':'Very high','high':'High','medium':'Medium','low':'Low'};
 const CREDENTIALS_KEY='fxbrief-credentials';
+const dashboardPages=['overview','conditions','sessions','profile'];
+function pageFromLocation(){const requested=window.location.hash.slice(1);return dashboardPages.includes(requested)?requested:'overview';}
 function readCredentials(){
   try{const saved=JSON.parse(localStorage.getItem(CREDENTIALS_KEY)||'null');if(saved&&typeof saved.username==='string'&&typeof saved.password==='string')return saved;}catch{}
   return {username:'mc',password:'mc1234'};
@@ -37,7 +39,7 @@ function dateBounds(range){
 
 function App(){
   const [loggedIn,setLoggedIn]=useState(()=>sessionStorage.getItem('fxbrief-auth')==='true');
-  const [page,setPage]=useState('overview');
+  const [page,setPageState]=useState(pageFromLocation);
   const [theme,setTheme]=useState(()=>localStorage.getItem('fxbrief-theme')||'light');
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
@@ -49,6 +51,8 @@ function App(){
   const [articles,setArticles]=useState([]); const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [notice,setNotice]=useState(''); const [searched,setSearched]=useState(false);
   const filtered=useMemo(()=>pairs.filter(p=>`${p.code} ${p.name} ${p.group}`.toLowerCase().includes(pairQuery.toLowerCase())),[pairQuery]);
   const visibleArticles=useMemo(()=>articles.filter(a=>riskFilter==='all'||a.impact===riskFilter),[articles,riskFilter]);
+  function setPage(nextPage){if(!dashboardPages.includes(nextPage))return;setPageState(nextPage);const hash=`#${nextPage}`;if(window.location.hash!==hash)window.history.pushState(null,'',hash);}
+  useEffect(()=>{const syncPage=()=>setPageState(pageFromLocation());window.addEventListener('popstate',syncPage);window.addEventListener('hashchange',syncPage);return()=>{window.removeEventListener('popstate',syncPage);window.removeEventListener('hashchange',syncPage);};},[]);
   function toggleTheme(){const next=theme==='light'?'dark':'light';localStorage.setItem('fxbrief-theme',next);setTheme(next);}
   function toggleWatchlist(code){setWatchlist(current=>{const next=current.includes(code)?current.filter(item=>item!==code):[...current,code];localStorage.setItem('fxbrief-watchlist',JSON.stringify(next));return next;});}
   function login(e){e.preventDefault();if(username===credentials.username&&password===credentials.password){sessionStorage.setItem('fxbrief-auth','true');setLoggedIn(true);setLoginError('');}else setLoginError('Incorrect username or password.');}

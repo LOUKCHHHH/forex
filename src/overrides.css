@@ -196,3 +196,39 @@ body,.app{background:#f3f6f4;color:#1c2b25}.sidebar{background:#183129;border-co
   .app .sidebar.collapsed .nav-active span{display:inline}
   .app .sidebar .user-chip.profile-link,.app .sidebar.collapsed .user-chip.profile-link{width:100%;height:auto;min-height:38px;justify-content:flex-start;padding:8px 4px 2px;border:0;border-radius:0;background:transparent}
 }
+
+/* Session opening countdown and complete dark surfaces */
+.session-next-open{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 11px;border:1px solid #e0e9e2;border-radius:6px;background:#f7faf7}
+.session-next-open>span{display:flex;align-items:center;gap:6px;color:#6c7c70;font-size:9px}
+.session-next-open>span svg{color:#568364}
+.session-next-open>b{color:#2e6547;font:700 13px 'DM Mono',monospace}
+.app.theme-dark .session-panel,.app.theme-dark .session-summary,.app.theme-dark .conditions-note{background:#18211c;border-color:#2b3930;box-shadow:none}
+.app.theme-dark .session-summary b,.app.theme-dark .conditions-card h2{color:#e3ece5}
+.app.theme-dark .session-summary span,.app.theme-dark .conditions-card p{color:#a6b3a9}
+.app.theme-dark .session-summary small,.app.theme-dark .conditions-card small{color:#afbeb2}
+.app.theme-dark .summary-icon{background:#263b2b;color:#a9d5b4}
+.app.theme-dark .condition-lower{background:linear-gradient(110deg,#17291d,#1b2a20);border-color:#3b8050}
+.app.theme-dark .condition-elevated{background:linear-gradient(110deg,#302719,#292319);border-color:#a77812}
+.app.theme-dark .condition-high{background:linear-gradient(110deg,#321f1c,#2a1c1a);border-color:#aa493d}
+.app.theme-dark .condition-lower .conditions-icon{background:#23442c;color:#8fd19c}
+.app.theme-dark .condition-elevated .conditions-icon{background:#493917;color:#f0c65d}
+.app.theme-dark .condition-high .conditions-icon{background:#4a2924;color:#f18d7f}
+.app.theme-dark .condition-lower .condition-level-chip{background:#203b27;color:#9cdaa6}
+.app.theme-dark .condition-elevated .condition-level-chip{background:#42351a;color:#edc95e}
+.app.theme-dark .condition-high .condition-level-chip{background:#482721;color:#f09a8c}
+.app.theme-dark .condition-lower .condition-event{background:#1c3021;border-color:#34553b}
+.app.theme-dark .condition-elevated .condition-event{background:#352b19;border-color:#65501f}
+.app.theme-dark .condition-high .condition-event{background:#39231f;border-color:#67352d}
+.app.theme-dark .conditions-note{color:#a1afa5}
+.app.theme-dark .market-native-select select{background:#121a15;border-color:#35443a;color:#e1eae3}
+.app.theme-dark .session-next-open{background:#142019;border-color:#314638}
+.app.theme-dark .session-next-open>span{color:#a1afa5}
+.app.theme-dark .session-next-open>span svg{color:#9bc9a4}
+.app.theme-dark .session-next-open>b{color:#b4dabc}
+.app.theme-dark .countdown-value{background:#332a17;border-color:#70571c}
+.app.theme-dark .countdown-value b{color:#f0c65d}
+.app.theme-dark .countdown-value small{color:#c8b477}
+.app.theme-dark .feed-notice{background:#302817;border-color:#665326;color:#e3cd8b}
+.app.theme-dark .profile-message.error{background:#321f1c;border-color:#714139;color:#f2a294}
+.app.theme-dark .profile-message.success{background:#1b3020;border-color:#355c3e;color:#aadbb2}
+@media(max-width:560px){.session-next-open{padding:9px}.session-next-open>b{font-size:12px}}

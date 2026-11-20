@@ -10,8 +10,32 @@ const sessions = [
 
 function localParts(date, zone) {
   return Object.fromEntries(new Intl.DateTimeFormat('en-US', {
-    timeZone: zone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(date).map(part => [part.type, part.value]));
+}
+
+function zonedTimeToUtc(year, month, day, hour, zone) {
+  const target = Date.UTC(year, month - 1, day, hour);
+  let guess = target;
+  for (let i = 0; i < 3; i++) {
+    const local = localParts(new Date(guess), zone);
+    const shownAsUtc = Date.UTC(Number(local.year), Number(local.month) - 1, Number(local.day), Number(local.hour), Number(local.minute));
+    guess += target - shownAsUtc;
+  }
+  return new Date(guess);
+}
+
+function nextSessionOpen(session, now) {
+  const local = localParts(now, session.zone);
+  const localDate = new Date(Date.UTC(Number(local.year), Number(local.month) - 1, Number(local.day)));
+  for (let daysAhead = 0; daysAhead <= 7; daysAhead++) {
+    const date = new Date(localDate.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+    const weekday = date.getUTCDay();
+    if (weekday === 0 || weekday === 6) continue;
+    const opening = zonedTimeToUtc(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), session.open, session.zone);
+    if (opening > now && isSessionOpen(session, opening)) return opening;
+  }
+  return null;
 }
 
 function isSessionOpen(session, now) {
@@ -46,6 +70,13 @@ function countdownText(milliseconds) {
   if (days) return `${days}d ${hours}h`;
   if (hours) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+}
+
+function sessionCountdownText(milliseconds) {
+  const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours}h ${String(minutes).padStart(2, '0')}m` : `${minutes}m`;
 }
 
 export function MarketWatchlist({ pairs, pair, watchlist, onSelect, onToggle }) {
@@ -180,10 +211,11 @@ export function MarketSessionsPage() {
     <section className="session-summary"><div className="summary-icon"><Globe2 size={19}/></div><div><small>FOREX WEEK STATUS</small><b>{openCount ? `${openCount} major ${openCount === 1 ? 'session is' : 'sessions are'} open` : 'Major sessions are closed'}</b><span>Broker schedules and local market holidays can differ.</span></div><span className="live-clock"><Clock3 size={13}/> {new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(now)}</span></section>
     <section className="session-grid">{sessions.map(session => {
       const open = isSessionOpen(session, now);
+      const nextOpen = open ? null : nextSessionOpen(session, now);
       const local = localParts(now, session.zone);
       const clock = new Intl.DateTimeFormat('en', { timeZone: session.zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
       const zone = new Intl.DateTimeFormat('en', { timeZone: session.zone, timeZoneName: 'short' }).formatToParts(now).find(part => part.type === 'timeZoneName')?.value;
-      return <article className={`session-card ${open ? 'is-open' : 'is-closed'}`} key={session.name}><div className="session-card-head"><span className="session-city-icon">{open ? <Sun size={18}/> : <Moon size={18}/>}</span><span className={`session-state ${open ? 'open' : 'closed'}`}>{open ? 'OPEN' : 'CLOSED'}</span></div><h2>{session.name}</h2><div className="session-time">{clock}<small>{zone} · {local.weekday}</small></div><div className="session-hours">Typical local hours <b>{String(session.open).padStart(2, '0')}:00–{String(session.close).padStart(2, '0')}:00</b></div></article>;
+      return <article className={`session-card ${open ? 'is-open' : 'is-closed'}`} key={session.name}><div className="session-card-head"><span className="session-city-icon">{open ? <Sun size={18}/> : <Moon size={18}/>}</span><span className={`session-state ${open ? 'open' : 'closed'}`}>{open ? 'OPEN' : 'CLOSED'}</span></div><h2>{session.name}</h2><div className="session-time">{clock}<small>{zone} · {local.weekday}</small></div><div className="session-hours">Typical local hours <b>{String(session.open).padStart(2, '0')}:00–{String(session.close).padStart(2, '0')}:00</b></div>{!open&&nextOpen&&<div className="session-next-open"><span><Clock3 size={13}/> Opens in</span><b>{sessionCountdownText(nextOpen-now)}</b></div>}</article>;
     })}</section>
     <p className="risk-explainer conditions-note">These are conventional local session windows, not official exchange hours. The global FX week is treated as open from Sunday 5:00 p.m. to Friday 5:00 p.m. New York time. Your broker may use different hours and holiday schedules.</p>
     <section className="session-panel"><div className="section-title"><div><small>SESSION HOURS</small><h2>Local trading windows</h2></div></div><p className="quiet-note">Sydney 08:00–16:00 · Tokyo 09:00–18:00 · London 08:00–16:00 · New York 08:00–17:00 local time. Clocks update for daylight saving changes.</p></section>

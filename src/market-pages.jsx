@@ -28,14 +28,18 @@ function zonedTimeToUtc(year, month, day, hour, zone) {
 function nextSessionOpen(session, now) {
   const local = localParts(now, session.zone);
   const localDate = new Date(Date.UTC(Number(local.year), Number(local.month) - 1, Number(local.day)));
+  const candidates = [];
   for (let daysAhead = 0; daysAhead <= 7; daysAhead++) {
     const date = new Date(localDate.getTime() + daysAhead * 24 * 60 * 60 * 1000);
     const weekday = date.getUTCDay();
-    if (weekday === 0 || weekday === 6) continue;
-    const opening = zonedTimeToUtc(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), session.open, session.zone);
-    if (opening > now && isSessionOpen(session, opening)) return opening;
+    if (weekday >= 1 && weekday <= 5) {
+      candidates.push(zonedTimeToUtc(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), session.open, session.zone));
+    }
+    if (weekday === 0) {
+      candidates.push(zonedTimeToUtc(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), 17, 'America/New_York'));
+    }
   }
-  return null;
+  return candidates.sort((a, b) => a - b).find(opening => opening > now && isSessionOpen(session, opening)) || null;
 }
 
 function isSessionOpen(session, now) {
@@ -74,8 +78,10 @@ function countdownText(milliseconds) {
 
 function sessionCountdownText(milliseconds) {
   const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60000));
+  const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
+  if (days) return `${days}d ${hours % 24}h ${String(minutes).padStart(2, '0')}m`;
   return hours ? `${hours}h ${String(minutes).padStart(2, '0')}m` : `${minutes}m`;
 }
 

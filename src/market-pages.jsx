@@ -26,6 +26,17 @@ function isSessionOpen(session, now) {
   return localSession && forexWeek;
 }
 
+function relatedCurrencies(pairCode) {
+  if (['XAU/USD', 'XAG/USD', 'WTI', 'BRENT', 'NASDAQ', 'S&P 500', 'DOW'].includes(pairCode)) return ['USD'];
+  if (pairCode === 'USD/CNH') return ['USD', 'CNY'];
+  if (pairCode === 'DAX') return ['EUR'];
+  if (pairCode === 'FTSE 100') return ['GBP'];
+  if (pairCode === 'NIKKEI') return ['JPY'];
+  if (pairCode === 'BTC/USD') return ['BTC', 'USD'];
+  if (pairCode === 'ETH/USD') return ['ETH', 'USD'];
+  return pairCode.match(/[A-Z]{3}/g) || [];
+}
+
 export function MarketConditionsPage({ pairs, pair, setPair }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,26 +53,34 @@ export function MarketConditionsPage({ pairs, pair, setPair }) {
     let active = true;
     setLoading(true);
     setError('');
-    fetch(`/api/news?pair=${encodeURIComponent(pair.code)}&source=forexfactory`)
+    fetch('/api/forexfactory')
       .then(async response => {
         const type = response.headers.get('content-type') || '';
         if (!type.includes('application/json')) throw new Error('Calendar API unavailable. Start the app with npm run dev or open the Vercel deployment.');
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Could not load scheduled events.');
-        return data.articles || [];
+        return data.events || [];
       })
       .then(data => { if (active) setEvents(data); })
       .catch(err => { if (active) setError(err.message || 'Could not load scheduled events.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [pair.code, refreshKey]);
+  }, [refreshKey]);
 
-  const upcoming = useMemo(() => events.map(event => ({ ...event, timestamp: Date.parse(event.publishedAt) }))
+  const marketEvents = useMemo(() => {
+    const currencies = new Set(relatedCurrencies(pair.code));
+    return events.filter(event => currencies.has(String(event.country || '').toUpperCase())).map(event => ({
+      id: `${event.country}-${event.date}-${event.title}`, title: event.title, eventCurrency: event.country,
+      impact: String(event.impact || '').toLowerCase(), description: [event.forecast && `Forecast: ${event.forecast}`, event.previous && `Previous: ${event.previous}`].filter(Boolean).join(' · '),
+      publishedAt: event.date,
+    }));
+  }, [events, pair.code]);
+  const upcoming = useMemo(() => marketEvents.map(event => ({ ...event, timestamp: Date.parse(event.publishedAt) }))
     .filter(event => Number.isFinite(event.timestamp) && event.timestamp >= now.getTime() && event.timestamp <= now.getTime() + 24 * 60 * 60 * 1000)
-    .sort((a, b) => a.timestamp - b.timestamp), [events, now]);
+    .sort((a, b) => a.timestamp - b.timestamp), [marketEvents, now]);
   const filteredPairs = useMemo(() => pairs.filter(item => `${item.code} ${item.name} ${item.group}`.toLowerCase().includes(marketQuery.toLowerCase())), [pairs, marketQuery]);
-  const eventWindow = useMemo(() => events.map(event => ({ ...event, timestamp: Date.parse(event.publishedAt) }))
-    .filter(event => Number.isFinite(event.timestamp) && event.timestamp >= now.getTime() - 30 * 60 * 1000 && event.timestamp <= now.getTime() + 3 * 60 * 60 * 1000), [events, now]);
+  const eventWindow = useMemo(() => marketEvents.map(event => ({ ...event, timestamp: Date.parse(event.publishedAt) }))
+    .filter(event => Number.isFinite(event.timestamp) && event.timestamp >= now.getTime() - 30 * 60 * 1000 && event.timestamp <= now.getTime() + 3 * 60 * 60 * 1000), [marketEvents, now]);
   const highSoon = eventWindow.find(event => event.impact === 'high' && event.timestamp < now.getTime() + 30 * 60 * 1000);
   const highNearby = upcoming.find(event => event.impact === 'high' && event.timestamp < now.getTime() + 3 * 60 * 60 * 1000);
   const mediumSoon = upcoming.find(event => event.impact === 'medium' && event.timestamp < now.getTime() + 60 * 60 * 1000);

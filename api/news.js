@@ -26,6 +26,7 @@ const FED_FEEDS = [
 ];
 const CNBC_FED_QUERY = '"Federal Reserve" OR FOMC OR "Federal Open Market Committee" OR "Fed rate" OR "Fed chair"';
 const CNBC_FED_RELEVANCE = /\b(federal reserve|fomc|federal open market committee|fed (?:chair|officials?|rate|rates|policy|meeting|decision|minutes))\b/i;
+const FF_WEEKLY_EXPORT = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
 
 function assessImpact(article) {
   const text = `${article.title || ''} ${article.description || ''}`;
@@ -49,6 +50,50 @@ function decodeXml(value = '') {
 function rssTag(item, tag) {
   const match = item.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
   return match ? decodeXml(match[1]) : '';
+}
+
+function currenciesForMarket(pair) {
+  if (pair === 'XAU/USD' || pair === 'XAG/USD' || pair === 'WTI' || pair === 'BRENT' || pair === 'NASDAQ' || pair === 'S&P 500' || pair === 'DOW') return ['USD'];
+  if (pair === 'BTC/USD') return ['BTC', 'USD'];
+  if (pair === 'ETH/USD') return ['ETH', 'USD'];
+  if (pair === 'DAX') return ['EUR'];
+  if (pair === 'FTSE 100') return ['GBP'];
+  if (pair === 'NIKKEI') return ['JPY'];
+  const fxCodes = pair.match(/[A-Z]{3}/g) || [];
+  if (fxCodes.length === 2) return fxCodes;
+  return [];
+}
+
+async function getForexFactoryEvents(pair, fromMs, toMs) {
+  const response = await fetch(FF_WEEKLY_EXPORT, { headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Forex Factory export request failed (${response.status})`);
+  const payload = await response.json();
+  if (!Array.isArray(payload)) throw new Error('Forex Factory returned an unexpected calendar format.');
+  const currencies = new Set(currenciesForMarket(pair));
+  return payload.filter(event => currencies.has(String(event.country || '').toUpperCase())).map(event => {
+    const publishedAt = event.date;
+    const timestamp = Date.parse(publishedAt || '');
+    const level = String(event.impact || '').toLowerCase();
+    const impact = level === 'high' ? 'high' : level === 'medium' ? 'medium' : 'low';
+    const forecast = event.forecast ? `Forecast: ${event.forecast}` : '';
+    const previous = event.previous ? `Previous: ${event.previous}` : '';
+    return {
+      id: `${event.country}-${timestamp}-${event.title}`,
+      title: event.title,
+      description: [forecast, previous].filter(Boolean).join(' · ') || 'Scheduled economic event',
+      url: 'https://www.forexfactory.com/calendar',
+      image: '',
+      publishedAt,
+      eventCurrency: String(event.country || '').toUpperCase(),
+      source: { name: 'Forex Factory Calendar', url: 'https://www.forexfactory.com/calendar' },
+      impact,
+      impactReason: `Forex Factory expected impact: ${event.impact || 'Non-Economic'}`,
+    };
+  }).filter(event => {
+    const timestamp = Date.parse(event.publishedAt || '');
+    if (!Number.isFinite(timestamp)) return false;
+    return (fromMs === null || timestamp >= fromMs) && (toMs === null || timestamp <= toMs);
+  }).sort((a, b) => Date.parse(a.publishedAt) - Date.parse(b.publishedAt));
 }
 
 async function getFederalReserveArticles(fromMs, toMs) {
@@ -112,7 +157,7 @@ export default async function handler(req, res) {
   const pairQuery = PAIRS[pair]?.[0];
   if (!pairQuery) return res.status(400).json({ error: 'Choose a supported market.' });
   const source = String(req.query.source || 'all');
-  if (!['all', 'fed', 'fed-cnbc'].includes(source)) return res.status(400).json({ error: 'Choose a supported news source.' });
+  if (!['all', 'fed', 'fed-cnbc', 'forexfactory'].includes(source)) return res.status(400).json({ error: 'Choose a supported news source.' });
   const from = req.query.from ? String(req.query.from) : '';
   const to = req.query.to ? String(req.query.to) : '';
   const fromMs = from ? Date.parse(from) : null;
@@ -121,6 +166,15 @@ export default async function handler(req, res) {
       (to && (!Number.isFinite(toMs) || new Date(toMs).toISOString() !== to)) ||
       (fromMs !== null && toMs !== null && fromMs > toMs)) {
     return res.status(400).json({ error: 'The selected date range is invalid.' });
+  }
+  if (source === 'forexfactory') {
+    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=3600');
+    try {
+      const events = await getForexFactoryEvents(pair, fromMs, toMs);
+      return res.status(200).json({ pair, source, from, to, articles: events });
+    } catch {
+      return res.status(502).json({ error: 'Could not load the Forex Factory weekly calendar export. Try again shortly or open the official calendar.' });
+    }
   }
   if (source === 'fed' || source === 'fed-cnbc') {
     try {

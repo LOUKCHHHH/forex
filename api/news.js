@@ -27,6 +27,17 @@ const FED_FEEDS = [
 const CNBC_FED_QUERY = '"Federal Reserve" OR FOMC OR "Federal Open Market Committee" OR "Fed rate" OR "Fed chair"';
 const CNBC_FED_RELEVANCE = /\b(federal reserve|fomc|federal open market committee|fed (?:chair|officials?|rate|rates|policy|meeting|decision|minutes))\b/i;
 
+function assessImpact(article) {
+  const text = `${article.title || ''} ${article.description || ''}`;
+  const rules = [
+    [/\b(fomc|rate decision|interest rate decision|rate announcement|emergency rate|nonfarm payrolls?|nfp|payrolls?|unemployment rate|cpi|pce|inflation|consumer prices|currency intervention|sovereign default|market crash|armed conflict|invasion)\b/i, 'very-high', 'Rate, inflation, employment, intervention, or crisis headline'],
+    [/\b(central bank|fed chair|fed officials?|ecb|bank of england|boe|boj|rba|rbnz|snb|rate cut|rate hike|rate hold|interest rate|gdp|recession|tariff|sanction|trade war)\b/i, 'high', 'Central-bank, growth, or geopolitical headline'],
+    [/\b(pmi|retail sales|trade balance|wages|industrial production|business activity|consumer confidence|housing|manufacturing|oil supply|opec|budget)\b/i, 'medium', 'Economic data or sector headline'],
+  ];
+  for (const [pattern, impact, reason] of rules) if (pattern.test(text)) return { impact, impactReason: reason };
+  return { impact: 'low', impactReason: 'No major market-impact terms identified in the headline or summary' };
+}
+
 function decodeXml(value = '') {
   return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]*>/g, ' ')
     .replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
@@ -63,7 +74,8 @@ async function getFederalReserveArticles(fromMs, toMs) {
     if (Number.isFinite(fromMs) && published < fromMs) return false;
     if (Number.isFinite(toMs) && published > toMs) return false;
     return true;
-  }).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+  }).map(article => ({ ...article, ...assessImpact(article) }))
+    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
   return articles.slice(0, 30);
 }
 
@@ -87,7 +99,10 @@ async function getCnbcFedArticles(apiKey, from, to, fromMs, toMs) {
     if (Number.isFinite(fromMs) && published < fromMs) return false;
     if (Number.isFinite(toMs) && published > toMs) return false;
     return true;
-  }).map(article => ({ title: article.title, description: article.description, content: article.content, url: article.url, image: article.image, publishedAt: article.publishedAt, source: article.source }));
+  }).map(article => {
+    const normalized = { title: article.title, description: article.description, content: article.content, url: article.url, image: article.image, publishedAt: article.publishedAt, source: article.source };
+    return { ...normalized, ...assessImpact(normalized) };
+  });
 }
 
 export default async function handler(req, res) {
@@ -147,7 +162,10 @@ export default async function handler(req, res) {
       if (Number.isFinite(fromMs) && published < fromMs) return false;
       if (Number.isFinite(toMs) && published > toMs) return false;
       return true;
-    }).map(a => ({ title: a.title, description: a.description, content: a.content, url: a.url, image: a.image, publishedAt: a.publishedAt, source: a.source }));
+    }).map(a => {
+      const normalized = { title: a.title, description: a.description, content: a.content, url: a.url, image: a.image, publishedAt: a.publishedAt, source: a.source };
+      return { ...normalized, ...assessImpact(normalized) };
+    });
     return res.status(200).json({ pair, source, from, to, articles });
   } catch { return res.status(502).json({ error: 'Could not connect to the news provider. Try again shortly.' }); }
 }

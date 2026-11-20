@@ -2,7 +2,7 @@
 
 A personal market news dashboard built with React and Vite. Choose a currency pair, commodity, index, or cryptocurrency, filter headlines by date, optionally limit results to the official Federal Reserve domain, and fetch current English-language news in separate article cards. Searches need no extra keyword.
 
-The dashboard has a login-only screen with the static username `mc` and password `mc1234`; there is no registration. Login persists for the current browser tab. This is a client-side personal-use gate, not secure authentication: the credentials are included in the frontend bundle.
+The dashboard has a login-only screen with initial username `mc` and password `mc1234`; there is no registration. The Profile page lets you change them for the current browser. Login persists for the current browser tab. Credentials are stored in browser local storage, so this is a client-side personal-use gate, not secure authentication.
 
 The dashboard includes a **Market conditions** page that highlights scheduled Forex Factory events for the selected instrument. It is an event-risk view only; it does not use live prices, measure volatility or liquidity, or determine whether a particular trade is safe. The **Market sessions** page shows conventional Sydney, Tokyo, London, and New York FX session hours in each city's local time and updates for daylight-saving changes. Session definitions and broker hours can differ, so use your broker's schedule for instrument-specific availability.
 

@@ -27,6 +27,12 @@ Select **Forex Factory calendar events** to load its published [weekly JSON cale
 
 Without the environment variable, all-source market news shows a setup error; the Federal Reserve feed remains available. Provider quotas and plan limits apply. GNews Free applies a 12-hour freshness delay, so the most recent date ranges may return no articles on that plan. The app links to each publisher; it does not reproduce full articles. Headlines are live news; the app does not display live market quotes or prices.
 
+## Database-backed news archive
+
+News results are stored in Postgres when `DATABASE_URL` is configured. The API creates its tables on first use, canonicalizes article URLs (removing common tracking parameters), and enforces a unique content key so repeated searches and pagination do not create duplicate stories. Forex Factory events use their currency, title, and release time as their identity because all events link to the same calendar page. Stored results are associated with the selected market and source, then returned as paginated results. If the database is not connected or temporarily unavailable, live results continue to work and the API reports that they were not saved.
+
+To enable storage locally, set `DATABASE_URL` in `.env.local`. For Vercel, install a Postgres Marketplace integration such as Neon and connect it to this project; Vercel supplies the connection environment variable. Redeploy after adding it. See [Vercel Marketplace storage](https://vercel.com/docs/marketplace-storage) and [Neon's Vercel integration](https://vercel.com/marketplace/neon).
+
 ## Deployment
 
 Vercel detects Vite and deploys the root-level `api/news.js` serverless function alongside the static app. Set the output directory to `dist` if Vercel does not detect it automatically.

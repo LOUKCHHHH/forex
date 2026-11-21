@@ -135,3 +135,39 @@ export async function persistAndListNews({ articles, pair, feed, page, fromMs, t
     return { ...fallback, warning: 'News storage is temporarily unavailable. Showing live results without saving them.' };
   }
 }
+
+export async function listStoredNews({ pair, feed, page = 1, fromMs = null, toMs = null }) {
+  const sql = getClient();
+  if (!sql) return { articles: [], totalArticles: 0, page, pageSize: PAGE_SIZE, persisted: false, warning: 'News database is not connected yet. No saved results are available.' };
+
+  try {
+    await ensureSchema(sql);
+    const from = fromMs === null ? null : new Date(fromMs);
+    const to = toMs === null ? null : new Date(toMs);
+    const rows = await sql`
+      SELECT n.article
+      FROM mcfx_news_articles n
+      JOIN mcfx_news_queries q ON q.article_id = n.id
+      WHERE q.market_code = ${pair} AND q.feed = ${feed}
+        AND (${from}::timestamptz IS NULL OR n.published_at >= ${from}::timestamptz)
+        AND (${to}::timestamptz IS NULL OR n.published_at <= ${to}::timestamptz)
+      ORDER BY
+        CASE WHEN ${feed} = 'forexfactory' THEN n.published_at END ASC,
+        CASE WHEN ${feed} <> 'forexfactory' THEN n.published_at END DESC,
+        n.id DESC
+      LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}
+    `;
+    const [countRow] = await sql`
+      SELECT COUNT(*)::int AS count
+      FROM mcfx_news_articles n
+      JOIN mcfx_news_queries q ON q.article_id = n.id
+      WHERE q.market_code = ${pair} AND q.feed = ${feed}
+        AND (${from}::timestamptz IS NULL OR n.published_at >= ${from}::timestamptz)
+        AND (${to}::timestamptz IS NULL OR n.published_at <= ${to}::timestamptz)
+    `;
+    return { articles: rows.map(row => row.article), totalArticles: Number(countRow.count) || 0, page, pageSize: PAGE_SIZE, persisted: true };
+  } catch (error) {
+    console.error('Saved news lookup failed:', error?.message || error);
+    return { articles: [], totalArticles: 0, page, pageSize: PAGE_SIZE, persisted: false, warning: 'Saved news could not be loaded right now.' };
+  }
+}

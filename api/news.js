@@ -1,4 +1,4 @@
-import { persistAndListNews } from './lib/news-store.js';
+import { listStoredNews, persistAndListNews } from './lib/news-store.js';
 
 const PAIRS = {
   'EUR/USD': ['"EUR/USD" OR EURUSD OR (euro AND "US dollar")'], 'GBP/USD': ['"GBP/USD" OR GBPUSD OR ("British pound" AND "US dollar")'],
@@ -173,6 +173,11 @@ export default async function handler(req, res) {
       (to && (!Number.isFinite(toMs) || new Date(toMs).toISOString() !== to)) ||
       (fromMs !== null && toMs !== null && fromMs > toMs)) {
     return res.status(400).json({ error: 'The selected date range is invalid.' });
+  }
+  if (req.query.mode === 'stored') {
+    res.setHeader('Cache-Control', 'no-store');
+    const result = await listStoredNews({ pair, feed: source, page, fromMs, toMs });
+    return res.status(200).json({ pair, source, from, to, ...result });
   }
   if (source === 'forexfactory') {
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=3600');

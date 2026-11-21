@@ -4,6 +4,7 @@ import newsHandler from './api/news.js';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   if (env.GNEWS_API_KEY) process.env.GNEWS_API_KEY ||= env.GNEWS_API_KEY;
+  if (env.DATABASE_URL) process.env.DATABASE_URL ||= env.DATABASE_URL;
   return {
   plugins: [{
     name: 'local-news-function',

@@ -232,3 +232,14 @@ body,.app{background:#f3f6f4;color:#1c2b25}.sidebar{background:#183129;border-co
 .app.theme-dark .profile-message.error{background:#321f1c;border-color:#714139;color:#f2a294}
 .app.theme-dark .profile-message.success{background:#1b3020;border-color:#355c3e;color:#aadbb2}
 @media(max-width:560px){.session-next-open{padding:9px}.session-next-open>b{font-size:12px}}
+.news-pagination{display:flex;align-items:center;justify-content:center;gap:14px;margin:22px 0 8px;color:#718078;font-size:10px}
+.news-pagination>span{white-space:nowrap}
+.news-pagination>span b{color:#293f31;font:700 10px 'DM Mono',monospace}
+.news-pagination button{min-height:36px;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 11px;border:1px solid #d6e2d9;border-radius:6px;background:#fff;color:#3c6548;font-size:10px;font-weight:600}
+.news-pagination button:hover:not(:disabled){background:#edf5ef;border-color:#b5cdbb}
+.news-pagination button:disabled{opacity:.45;cursor:not-allowed}
+.app.theme-dark .news-pagination{color:#a1afa5}
+.app.theme-dark .news-pagination>span b{color:#dce5dd}
+.app.theme-dark .news-pagination button{background:#1b261f;border-color:#3b4b40;color:#c1d8c5}
+.app.theme-dark .news-pagination button:hover:not(:disabled){background:#263b2b;border-color:#55785c}
+@media(max-width:560px){.news-pagination{gap:8px;margin-top:17px;font-size:9px}.news-pagination button{min-height:35px;padding:0 8px;font-size:9px}}

@@ -27,6 +27,13 @@ const FED_FEEDS = [
 const CNBC_FED_QUERY = '"Federal Reserve" OR FOMC OR "Federal Open Market Committee" OR "Fed rate" OR "Fed chair"';
 const CNBC_FED_RELEVANCE = /\b(federal reserve|fomc|federal open market committee|fed (?:chair|officials?|rate|rates|policy|meeting|decision|minutes))\b/i;
 const FF_WEEKLY_EXPORT = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+const PAGE_SIZE = 10;
+const MAX_PAGE = 100;
+
+function paginate(articles, page, totalArticles = articles.length) {
+  const start = (page - 1) * PAGE_SIZE;
+  return { articles: articles.slice(start, start + PAGE_SIZE), totalArticles, page, pageSize: PAGE_SIZE };
+}
 
 function assessImpact(article) {
   const text = `${article.title || ''} ${article.description || ''}`;
@@ -121,11 +128,11 @@ async function getFederalReserveArticles(fromMs, toMs) {
     return true;
   }).map(article => ({ ...article, ...assessImpact(article) }))
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
-  return articles.slice(0, 30);
+  return articles;
 }
 
-async function getCnbcFedArticles(apiKey, from, to, fromMs, toMs) {
-  const params = new URLSearchParams({ q: CNBC_FED_QUERY, lang: 'en', max: '10', sortby: 'publishedAt' });
+async function getCnbcFedArticles(apiKey, from, to, fromMs, toMs, page, max = PAGE_SIZE) {
+  const params = new URLSearchParams({ q: CNBC_FED_QUERY, lang: 'en', max: String(max), page: String(page), sortby: 'publishedAt' });
   const freshnessFloor = Date.now() - 12 * 60 * 60 * 1000;
   const providerCanSearchRange = fromMs === null || fromMs <= freshnessFloor;
   if (from && providerCanSearchRange) params.set('from', from);
@@ -133,7 +140,7 @@ async function getCnbcFedArticles(apiKey, from, to, fromMs, toMs) {
   const response = await fetch(`https://gnews.io/api/v4/search?${params}`, { headers: { 'X-Api-Key': apiKey } });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.errors?.[0] || `GNews request failed (${response.status})`);
-  return (payload.articles || []).filter(article => {
+  const articles = (payload.articles || []).filter(article => {
     if (!article.title || !article.url) return false;
     let url;
     try { url = new URL(article.url); } catch { return false; }
@@ -148,6 +155,7 @@ async function getCnbcFedArticles(apiKey, from, to, fromMs, toMs) {
     const normalized = { title: article.title, description: article.description, content: article.content, url: article.url, image: article.image, publishedAt: article.publishedAt, source: article.source };
     return { ...normalized, ...assessImpact(normalized) };
   });
+  return { articles, totalArticles: Number(payload.totalArticles) || articles.length };
 }
 
 export default async function handler(req, res) {
@@ -158,6 +166,8 @@ export default async function handler(req, res) {
   if (!pairQuery) return res.status(400).json({ error: 'Choose a supported market.' });
   const source = String(req.query.source || 'all');
   if (!['all', 'fed', 'fed-cnbc', 'forexfactory'].includes(source)) return res.status(400).json({ error: 'Choose a supported news source.' });
+  const page = Number.parseInt(req.query.page || '1', 10);
+  if (!Number.isInteger(page) || page < 1 || page > MAX_PAGE) return res.status(400).json({ error: `Page must be between 1 and ${MAX_PAGE}.` });
   const from = req.query.from ? String(req.query.from) : '';
   const to = req.query.to ? String(req.query.to) : '';
   const fromMs = from ? Date.parse(from) : null;
@@ -171,7 +181,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=3600');
     try {
       const events = await getForexFactoryEvents(pair, fromMs, toMs);
-      return res.status(200).json({ pair, source, from, to, articles: events });
+      return res.status(200).json({ pair, source, from, to, ...paginate(events, page) });
     } catch {
       return res.status(502).json({ error: 'Could not load the Forex Factory weekly calendar export. Try again shortly or open the official calendar.' });
     }
@@ -179,16 +189,18 @@ export default async function handler(req, res) {
   if (source === 'fed' || source === 'fed-cnbc') {
     try {
       const fedArticles = await getFederalReserveArticles(fromMs, toMs);
-      if (source === 'fed') return res.status(200).json({ pair, source, from, to, articles: fedArticles });
+      if (source === 'fed') return res.status(200).json({ pair, source, from, to, ...paginate(fedArticles, page) });
       const apiKey = process.env.GNEWS_API_KEY;
-      if (!apiKey) return res.status(200).json({ pair, source, from, to, articles: fedArticles, warning: 'CNBC coverage needs GNEWS_API_KEY. Showing official Federal Reserve items only.' });
+      if (!apiKey) return res.status(200).json({ pair, source, from, to, ...paginate(fedArticles, page), warning: 'CNBC coverage needs GNEWS_API_KEY. Showing official Federal Reserve items only.' });
       try {
-        const cnbcArticles = await getCnbcFedArticles(apiKey, from, to, fromMs, toMs);
-        const byUrl = new Map([...fedArticles, ...cnbcArticles].map(article => [article.url, article]));
+        const perSource = PAGE_SIZE / 2;
+        const cnbc = await getCnbcFedArticles(apiKey, from, to, fromMs, toMs, page, perSource);
+        const fedPage = fedArticles.slice((page - 1) * perSource, page * perSource);
+        const byUrl = new Map([...fedPage, ...cnbc.articles].map(article => [article.url, article]));
         const articles = [...byUrl.values()].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
-        return res.status(200).json({ pair, source, from, to, articles });
+        return res.status(200).json({ pair, source, from, to, articles, totalArticles: fedArticles.length + cnbc.totalArticles, page, pageSize: PAGE_SIZE });
       } catch {
-        return res.status(200).json({ pair, source, from, to, articles: fedArticles, warning: 'CNBC could not be reached right now. Showing official Federal Reserve items only.' });
+        return res.status(200).json({ pair, source, from, to, ...paginate(fedArticles, page), warning: 'CNBC could not be reached right now. Showing official Federal Reserve items only.' });
       }
     } catch {
       return res.status(502).json({ error: 'Could not load Federal Reserve RSS feeds. Open the official News & Events calendar and try again later.' });
@@ -196,7 +208,7 @@ export default async function handler(req, res) {
   }
   const apiKey = process.env.GNEWS_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'Live news is not configured. Locally, add GNEWS_API_KEY to .env.local and restart Vite. On Vercel, add it in Project Settings → Environment Variables, then redeploy.' });
-  const params = new URLSearchParams({ q: pairQuery, lang: 'en', max: '10', sortby: 'publishedAt' });
+  const params = new URLSearchParams({ q: pairQuery, lang: 'en', max: String(PAGE_SIZE), page: String(page), sortby: 'publishedAt' });
   // GNews Free cannot return articles from the most recent 12 hours. Avoid
   // sending an inverted interval for short ranges; filter the fetched articles below.
   const freeFreshnessFloor = Date.now() - 12 * 60 * 60 * 1000;
@@ -220,6 +232,6 @@ export default async function handler(req, res) {
       const normalized = { title: a.title, description: a.description, content: a.content, url: a.url, image: a.image, publishedAt: a.publishedAt, source: a.source };
       return { ...normalized, ...assessImpact(normalized) };
     });
-    return res.status(200).json({ pair, source, from, to, articles });
+    return res.status(200).json({ pair, source, from, to, ...paginate(articles, 1, Number(payload.totalArticles) || articles.length), page });
   } catch { return res.status(502).json({ error: 'Could not connect to the news provider. Try again shortly.' }); }
 }
